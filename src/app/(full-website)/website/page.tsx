@@ -9,5 +9,9 @@ export const metadata: Metadata = {
 };
 
 export default function WebsitePage() {
-  return <WebsiteBuilder />;
+  return (
+    <div className="h-full overflow-auto">
+      <WebsiteBuilder fullPage />
+    </div>
+  );
 }

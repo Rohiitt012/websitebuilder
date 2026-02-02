@@ -2,7 +2,8 @@
 
 import React, { useState, useCallback } from "react";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
-import { PaperPlaneIcon, TrashBinIcon } from "@/icons";
+import { PaperPlaneIcon } from "@/icons";
+import WebsiteEditorView from "./WebsiteEditorView";
 
 type WebsiteSection = {
   id: string;
@@ -60,10 +61,13 @@ function buildFromPrompt(prompt: string): WebsiteContent {
   };
 }
 
-export default function WebsiteBuilder() {
+type WebsiteBuilderProps = { fullPage?: boolean };
+
+export default function WebsiteBuilder({ fullPage = false }: WebsiteBuilderProps) {
   const [prompt, setPrompt] = useState("");
   const [content, setContent] = useState<WebsiteContent | null>(null);
   const [showPromptBar, setShowPromptBar] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const handleBuild = useCallback(() => {
     const built = buildFromPrompt(prompt);
@@ -112,14 +116,14 @@ export default function WebsiteBuilder() {
   }, []);
 
   return (
-    <div className="space-y-6">
-      <PageBreadcrumb pageTitle="Website" />
+    <div className={fullPage ? "flex h-full flex-col overflow-hidden" : "space-y-6"}>
+      {!fullPage && <PageBreadcrumb pageTitle="Website" />}
 
       {/* Prompt bar - shown when no content or user wants to build new */}
       <div
         className={`rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] ${
           showPromptBar ? "block" : "hidden"
-        }`}
+        } ${fullPage ? "mx-4 mt-4 shrink-0" : ""}`}
       >
         <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
           <h3 className="text-theme-sm font-medium text-gray-800 dark:text-white/90">
@@ -149,100 +153,26 @@ export default function WebsiteBuilder() {
         </div>
       </div>
 
-      {/* Built website – editable */}
+      {/* Full editor interface after Build Website */}
       {content && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-theme-sm text-gray-600 dark:text-gray-400">
-              Edit section titles and content below. Changes apply in real time.
-            </p>
-            <button
-              type="button"
-              onClick={handleBuildNew}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-            >
-              Build new website
-            </button>
-          </div>
-
-          <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] xl:px-10 xl:py-12">
-            {/* Editable header / title */}
-            <div className="border-b border-gray-200 px-4 py-6 dark:border-gray-800 md:px-6">
-              <input
-                value={content.title}
-                onChange={(e) => updateContent("title", e.target.value)}
-                className="w-full bg-transparent text-2xl font-semibold text-gray-800 outline-none placeholder-gray-400 dark:text-white md:text-3xl"
-                placeholder="Website title"
-              />
-            </div>
-
-            {/* Hero – editable */}
-            <div className="space-y-4 px-4 py-8 md:px-6">
-              <input
-                value={content.heroHeading}
-                onChange={(e) => updateContent("heroHeading", e.target.value)}
-                className="w-full bg-transparent text-xl font-semibold text-gray-800 outline-none placeholder-gray-400 dark:text-white md:text-2xl"
-                placeholder="Hero heading"
-              />
-              <textarea
-                value={content.heroDescription}
-                onChange={(e) => updateContent("heroDescription", e.target.value)}
-                rows={3}
-                className="w-full resize-y rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
-                placeholder="Hero description"
-              />
-            </div>
-
-            {/* Editable sections */}
-            <div className="space-y-6 px-4 pb-8 md:px-6">
-              {content.sections.map((section) => (
-                <div
-                  key={section.id}
-                  className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"
-                >
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <input
-                      value={section.title}
-                      onChange={(e) => updateSection(section.id, { title: e.target.value })}
-                      className="flex-1 bg-transparent text-lg font-medium text-gray-800 outline-none dark:text-white"
-                      placeholder="Section title"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeSection(section.id)}
-                      className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-500 dark:hover:bg-gray-800"
-                      title="Remove section"
-                    >
-                      <TrashBinIcon className="h-5 w-5" />
-                    </button>
-                  </div>
-                  <textarea
-                    value={section.content}
-                    onChange={(e) => updateSection(section.id, { content: e.target.value })}
-                    rows={3}
-                    className="w-full resize-y rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-gray-600 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:placeholder-gray-500"
-                    placeholder="Section content"
-                  />
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={addSection}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 py-4 text-sm font-medium text-gray-500 transition hover:border-brand-500 hover:text-brand-500 dark:border-gray-700 dark:hover:border-brand-500"
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add section
-              </button>
-            </div>
-          </div>
+        <div className={fullPage ? "min-h-0 flex-1 overflow-hidden" : ""}>
+          <WebsiteEditorView
+            content={content}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onUpdateContent={updateContent}
+            onUpdateSection={updateSection}
+            onAddSection={addSection}
+            onRemoveSection={removeSection}
+            onBuildNew={handleBuildNew}
+            fullPage={fullPage}
+          />
         </div>
       )}
 
       {/* When no content and prompt bar hidden (shouldn't happen) */}
       {!content && !showPromptBar && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-white/[0.03]">
+        <div className={`rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-white/[0.03] ${fullPage ? "mx-4 mt-4" : ""}`}>
           <button
             type="button"
             onClick={() => setShowPromptBar(true)}
