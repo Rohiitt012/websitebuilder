@@ -13,6 +13,7 @@ import {
   FolderIcon,
   GridIcon,
   ChevronDownIcon,
+  ChevronLeftIcon,
   ChevronUpIcon,
   BellIcon,
   EyeIcon,
@@ -115,6 +116,10 @@ function NavigatorTree({
   expandedIds,
   onToggleExpand,
   level = 0,
+  parentId,
+  onReorder,
+  getNodeLabel,
+  onRename,
 }: {
   nodes: NavNode[];
   selectedId: string | null;
@@ -122,12 +127,20 @@ function NavigatorTree({
   expandedIds: Set<string>;
   onToggleExpand: (id: string) => void;
   level?: number;
+  parentId?: string;
+  onReorder?: (parentId: string, fromIndex: number, toIndex: number) => void;
+  getNodeLabel?: (node: NavNode) => string;
+  onRename?: (nodeId: string, newLabel: string) => void;
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState("");
   const iconWrapperClass = "flex h-6 w-6 min-w-[1.5rem] shrink-0 items-center justify-center overflow-visible p-0.5 mr-0.5 [&>svg]:size-5 [&>svg]:shrink-0";
+  const canDrag = parentId != null && typeof onReorder === "function";
+  const displayLabel = getNodeLabel ? (node: NavNode) => getNodeLabel(node) : (node: NavNode) => node.label;
 
   return (
     <ul className={level === 0 ? "space-y-0.5" : "ml-3 mt-0.5 space-y-0.5 border-l border-gray-700 pl-2"}>
-      {nodes.map((node) => {
+      {nodes.map((node, index) => {
         const hasChildren = node.children && node.children.length > 0;
         const isExpandable = node.id === "body" || !!node.collapsible;
         const isExpanded = expandedIds.has(node.id);
@@ -135,7 +148,22 @@ function NavigatorTree({
         const isCubeNode = node.iconType === "cube";
 
         return (
-          <li key={node.id}>
+          <li
+            key={node.id}
+            draggable={canDrag}
+            onDragStart={canDrag ? (e) => { e.stopPropagation(); e.dataTransfer.setData("text/plain", String(index)); e.dataTransfer.effectAllowed = "move"; } : undefined}
+            onDragOver={canDrag ? (e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "move"; e.currentTarget.classList.add("opacity-70"); } : undefined}
+            onDragLeave={canDrag ? (e) => { e.currentTarget.classList.remove("opacity-70"); } : undefined}
+            onDrop={canDrag ? (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              e.currentTarget.classList.remove("opacity-70");
+              const fromIndex = Number(e.dataTransfer.getData("text/plain"));
+              if (Number.isNaN(fromIndex) || fromIndex === index || parentId == null) return;
+              onReorder(parentId, fromIndex, index);
+            } : undefined}
+            className={canDrag ? "cursor-grab active:cursor-grabbing rounded transition-opacity" : ""}
+          >
             <div className="flex min-w-0 items-center gap-2">
               {isExpandable && (
                 <button
@@ -147,7 +175,7 @@ function NavigatorTree({
                   {isExpanded ? (
                     <ChevronDownIcon className="h-5 w-5" />
                   ) : (
-                    <span className="inline-flex h-5 w-5 items-center justify-center text-xl font-medium text-gray-400 leading-none">&gt;</span>
+                    <ChevronLeftIcon className="h-5 w-5 rotate-180 text-gray-400" />
                   )}
                 </button>
               )}
@@ -193,11 +221,45 @@ function NavigatorTree({
               <button
                 type="button"
                 onClick={() => onSelect(node.id)}
+                onDoubleClick={(e) => {
+                  if (onRename) {
+                    e.preventDefault();
+                    setEditingId(node.id);
+                    setEditingValue(displayLabel(node));
+                  }
+                }}
+                title={onRename ? "Double-click to rename" : undefined}
                 className={`min-w-0 flex-1 rounded px-2 py-1.5 text-left text-sm transition ${
                   isSelected ? "bg-green-500/20 text-green-400" : isCubeNode ? "text-green-400 hover:bg-gray-800 hover:text-green-300" : "text-gray-300 hover:bg-gray-800 hover:text-white"
                 }`}
               >
-                <span className="break-words">{node.label}</span>
+                {editingId === node.id ? (
+                  <input
+                    type="text"
+                    value={editingValue}
+                    onChange={(e) => setEditingValue(e.target.value)}
+                    onBlur={() => {
+                      onRename?.(node.id, editingValue.trim());
+                      setEditingId(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        onRename?.(node.id, editingValue.trim());
+                        setEditingId(null);
+                      }
+                      if (e.key === "Escape") {
+                        setEditingId(null);
+                        setEditingValue(displayLabel(node));
+                      }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="min-w-0 w-full rounded border border-brand-500 bg-gray-800 px-1.5 py-0.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    autoFocus
+                  />
+                ) : (
+                  <span className="break-words">{displayLabel(node)}</span>
+                )}
               </button>
             </div>
             {hasChildren && isExpandable && isExpanded && (
@@ -208,6 +270,10 @@ function NavigatorTree({
                 expandedIds={expandedIds}
                 onToggleExpand={onToggleExpand}
                 level={level + 1}
+                parentId={node.id}
+                onReorder={onReorder}
+                getNodeLabel={getNodeLabel}
+                onRename={onRename}
               />
             )}
           </li>
@@ -258,8 +324,7 @@ export default function WebsiteEditorView({
     });
   };
 
-  const navTree = useMemo((): NavNode[] => {
-    return [
+  const getInitialNavTree = (): NavNode[] => [
       {
         id: "body",
         label: "Body",
@@ -404,14 +469,70 @@ export default function WebsiteEditorView({
               },
             ],
           },
+          {
+            id: "section-new",
+            label: "Section",
+            collapsible: true,
+            iconType: "sectionCollapsible",
+            children: [
+              {
+                id: "section-new-grid",
+                label: "Works Grid",
+                collapsible: true,
+                iconType: "grid",
+                children: [
+                  { id: "section-new-div-1", label: "Div Block", collapsible: true, iconType: "divBlock" },
+                  { id: "section-new-div-2", label: "Div Block", collapsible: true, iconType: "divBlock" },
+                  { id: "section-new-div-3", label: "Div Block", collapsible: true, iconType: "divBlock" },
+                  { id: "section-new-div-4", label: "Div Block", collapsible: true, iconType: "divBlock" },
+                ],
+              },
+            ],
+          },
           { id: "contact", label: "Contact", iconType: "cube" },
           { id: "footer", label: "Footer", iconType: "cube" },
         ],
       },
     ];
-  }, []);
 
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set(["body", "hero", "works-section"]));
+  const [navTree, setNavTree] = useState<NavNode[]>(getInitialNavTree);
+
+  function updateNodeInTree(nodes: NavNode[], targetId: string, update: (node: NavNode) => NavNode): NavNode[] {
+    return nodes.map((node) => {
+      if (node.id === targetId) return update(node);
+      if (node.children?.length) {
+        return { ...node, children: updateNodeInTree(node.children, targetId, update) };
+      }
+      return node;
+    });
+  }
+
+  const reorderChildren = (parentId: string, fromIndex: number, toIndex: number) => {
+    setNavTree((prev) =>
+      updateNodeInTree(prev, parentId, (node) => {
+        const children = [...(node.children || [])];
+        if (fromIndex < 0 || fromIndex >= children.length || toIndex < 0 || toIndex >= children.length) return node;
+        const [removed] = children.splice(fromIndex, 1);
+        children.splice(toIndex, 0, removed);
+        return { ...node, children };
+      })
+    );
+  };
+
+  const [customLabels, setCustomLabels] = useState<Record<string, string>>({});
+  const getNodeLabel = (node: NavNode) => customLabels[node.id] ?? node.label;
+  const handleRename = (nodeId: string, newLabel: string) => {
+    setCustomLabels((prev) => {
+      if (!newLabel.trim()) {
+        const next = { ...prev };
+        delete next[nodeId];
+        return next;
+      }
+      return { ...prev, [nodeId]: newLabel.trim() };
+    });
+  };
+
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set(["body", "hero", "works-section", "section-new"]));
   const toggleExpand = (id: string) => {
     setExpandedIds((prev) => {
       const next = new Set(prev);
@@ -434,6 +555,12 @@ export default function WebsiteEditorView({
       "heading-jumbo": "Heading Jumbo",
       "section-2": "Section",
       "section-3": "Section",
+      "section-new": "Section",
+      "section-new-grid": "Works Grid",
+      "section-new-div-1": "Div Block",
+      "section-new-div-2": "Div Block",
+      "section-new-div-3": "Div Block",
+      "section-new-div-4": "Div Block",
       "works-section": "Section",
       "works-grid": "Works Grid",
       "div-block-1": "Div Block",
@@ -456,8 +583,8 @@ export default function WebsiteEditorView({
       labels[`position-p-${i}`] = "Paragraph Light";
       labels[`position-tiny-${i}`] = "Paragraph Tiny";
     }
-    return labels[selectedId] ?? selectedId.replace(/-/g, " ");
-  }, [selectedId]);
+    return customLabels[selectedId] ?? labels[selectedId] ?? selectedId.replace(/-/g, " ");
+  }, [selectedId, customLabels]);
 
   const leftIcons = [
     { Icon: PlusIcon, title: "Add" },
@@ -619,18 +746,21 @@ export default function WebsiteEditorView({
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto overflow-x-visible p-2">
+          <div className="flex-1 overflow-y-auto overflow-x-visible p-2 custom-scrollbar-panel">
             <NavigatorTree
               nodes={navTree}
               selectedId={selectedId}
               onSelect={onSelect}
               expandedIds={expandedIds}
               onToggleExpand={toggleExpand}
+              onReorder={reorderChildren}
+              getNodeLabel={getNodeLabel}
+              onRename={handleRename}
             />
           </div>
         </div>
         <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="relative flex-1 overflow-auto bg-gray-800/30 p-6">
+          <div className="relative flex-1 overflow-auto bg-gray-800/30 p-6 custom-scrollbar-panel">
             <div
               className="mx-auto min-h-full rounded-lg border border-gray-600 bg-white shadow-xl"
               style={{ maxWidth: viewportPx }}
@@ -784,6 +914,43 @@ export default function WebsiteEditorView({
                     ))}
                   </div>
                 </section>
+                {/* Section New - Works Grid with Div Blocks (no intro) */}
+                <section
+                  data-id="section-new"
+                  onClick={(e) => { e.stopPropagation(); onSelect("section-new"); }}
+                  className={`relative rounded-lg p-4 ${viewportCategory === "mobile" ? "mt-8" : "mt-16"} ${selectedId === "section-new" ? "ring-2 ring-brand-500 ring-offset-2" : ""}`}
+                >
+                  {selectedId === "section-new" && (
+                    <span className="absolute left-0 top-0 z-10 rounded-br bg-brand-500 px-2 py-0.5 text-xs font-medium text-white">Section</span>
+                  )}
+                  <div
+                    data-id="section-new-grid"
+                    onClick={(e) => { e.stopPropagation(); onSelect("section-new-grid"); }}
+                    className={`grid ${viewportCategory === "mobile" ? "grid-cols-1 gap-4" : viewportCategory === "tablet" ? "grid-cols-1 sm:grid-cols-2 gap-6" : "grid-cols-1 sm:grid-cols-2 gap-8"} ${selectedId === "section-new-grid" ? "ring-2 ring-brand-500 ring-offset-2 rounded-lg" : ""}`}
+                  >
+                    {[
+                      { id: "section-new-div-1", title: "Card 1", category: "Category" },
+                      { id: "section-new-div-2", title: "Card 2", category: "Category" },
+                      { id: "section-new-div-3", title: "Card 3", category: "Category" },
+                      { id: "section-new-div-4", title: "Card 4", category: "Category" },
+                    ].map(({ id, title, category }) => (
+                      <div
+                        key={id}
+                        data-id={id}
+                        onClick={(e) => { e.stopPropagation(); onSelect(id); }}
+                        className={`rounded-lg border border-gray-200 overflow-hidden ${selectedId === id ? "ring-2 ring-brand-500 ring-offset-2" : ""}`}
+                      >
+                        <div className="aspect-video bg-gray-200 flex items-center justify-center">
+                          <span className="text-xs text-brand-600 font-medium">Image</span>
+                        </div>
+                        <div className="p-4">
+                          <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+                          <p className="text-sm text-gray-500">{category}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
                 {/* Contact */}
                 <section
                   data-id="contact"
@@ -840,7 +1007,7 @@ export default function WebsiteEditorView({
                   <div className="h-full bg-brand-500 transition-all" style={{ width: `${(getStartedCount / 8) * 100}%` }} />
                 </div>
                 {getStartedExpanded && (
-                  <ul className="max-h-64 overflow-y-auto py-1">
+                  <ul className="max-h-64 overflow-y-auto py-1 custom-scrollbar-panel">
                     {GET_STARTED_ITEMS.map((label, index) => (
                       <li key={index}>
                         <button
@@ -856,7 +1023,7 @@ export default function WebsiteEditorView({
                             {getStartedCompleted[index] && <CheckLineIcon className="h-3.5 w-3.5 text-white" />}
                           </span>
                           <span className="flex-1 truncate">{label}</span>
-                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-xl text-gray-500 leading-none" aria-hidden>&gt;</span>
+                          <ChevronLeftIcon className="h-5 w-5 shrink-0 rotate-180 text-gray-500" aria-hidden />
                         </button>
                       </li>
                     ))}
@@ -882,7 +1049,7 @@ export default function WebsiteEditorView({
               </button>
             ))}
           </div>
-          <div className="flex-1 overflow-y-auto p-4 text-gray-300">
+          <div className="flex-1 overflow-y-auto p-4 text-gray-300 custom-scrollbar-panel">
             {propertiesTab === "Style" && (
               <div>
                 {!selectedId ? (
