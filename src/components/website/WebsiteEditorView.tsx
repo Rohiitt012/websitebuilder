@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   PlusIcon,
   FileIcon,
@@ -56,7 +56,47 @@ type Props = {
   fullPage?: boolean;
 };
 
-const VIEWPORT_WIDTHS = [1065, 768, 375];
+/** Breakpoints with device icon type. Add/change sizes here. */
+const VIEWPORT_BREAKPOINTS = [
+  { width: 1065, label: "Desktop", icon: "desktop" as const },
+  { width: 992, label: "Desktop", icon: "desktop" as const },
+  { width: 768, label: "Tablet", icon: "tablet" as const },
+  { width: 479, label: "Mobile L", icon: "phone" as const },
+  { width: 375, label: "Mobile", icon: "phone" as const },
+];
+
+function ViewportDeviceIcon({ type, isBase, className = "h-4 w-4" }: { type: "desktop" | "tablet" | "phone"; isBase?: boolean; className?: string }) {
+  const c = "currentColor";
+  if (type === "desktop") {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <rect x="2" y="3" width="20" height="14" rx="1" />
+        <path d="M8 21h8M12 17v4" />
+        {isBase && <circle cx="18" cy="6" r="1.5" fill={c} />}
+      </svg>
+    );
+  }
+  if (type === "tablet") {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <rect x="2" y="6" width="20" height="12" rx="1" />
+        <path d="M12 20v-2" />
+      </svg>
+    );
+  }
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="5" y="2" width="14" height="20" rx="2" />
+      <path d="M12 18h.01" />
+    </svg>
+  );
+}
+
+function getViewportCategory(viewportPx: number): "mobile" | "tablet" | "desktop" {
+  if (viewportPx <= 479) return "mobile";
+  if (viewportPx <= 768) return "tablet";
+  return "desktop";
+}
 const GET_STARTED_ITEMS = [
   "Create a site",
   "Change colors, fonts, and classes",
@@ -189,10 +229,26 @@ export default function WebsiteEditorView({
   fullPage = false,
 }: Props) {
   const [viewportPx, setViewportPx] = useState(1065);
+  const [viewportDropdownOpen, setViewportDropdownOpen] = useState<number | null>(null);
+  const viewportDropdownRef = useRef<HTMLDivElement>(null);
+  const [navMenuOpen, setNavMenuOpen] = useState(false);
   const [propertiesTab, setPropertiesTab] = useState<"Style" | "Properties" | "Settings" | "Interactions">("Style");
   const [getStartedCompleted, setGetStartedCompleted] = useState<boolean[]>([true, false, false, false, false, false, false, false]);
   const [getStartedExpanded, setGetStartedExpanded] = useState(true);
 
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (viewportDropdownRef.current && !viewportDropdownRef.current.contains(event.target as Node)) {
+        setViewportDropdownOpen(null);
+      }
+    }
+    if (viewportDropdownOpen !== null) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [viewportDropdownOpen]);
+
+  const viewportCategory = getViewportCategory(viewportPx);
   const getStartedCount = getStartedCompleted.filter(Boolean).length;
   const toggleGetStarted = (index: number) => {
     setGetStartedCompleted((prev) => {
@@ -458,19 +514,48 @@ export default function WebsiteEditorView({
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-0.5 rounded border border-gray-600 bg-gray-700/50">
-            {VIEWPORT_WIDTHS.map((w) => (
-              <button
-                key={w}
-                type="button"
-                onClick={() => setViewportPx(w)}
-                className={`rounded px-2 py-1 text-xs font-medium transition ${viewportPx === w ? "bg-brand-500 text-white" : "text-gray-400 hover:bg-gray-700 hover:text-white"}`}
-              >
-                {w}
-              </button>
-            ))}
+          <div className="relative" ref={viewportDropdownRef}>
+            <div className="flex items-center gap-0.5 rounded border border-gray-600 bg-gray-700/50 p-0.5">
+              {VIEWPORT_BREAKPOINTS.map((bp, index) => (
+                <button
+                  key={bp.width}
+                  type="button"
+                  onClick={() => {
+                    setViewportPx(bp.width);
+                    setViewportDropdownOpen((prev) => (prev === bp.width ? null : bp.width));
+                  }}
+                  className={`flex h-8 w-8 items-center justify-center rounded transition ${viewportPx === bp.width ? "bg-brand-500 text-white" : "text-gray-400 hover:bg-gray-700 hover:text-white"}`}
+                  title={`${bp.label}: ${bp.width}px`}
+                  aria-label={`${bp.label} ${bp.width}px`}
+                  aria-expanded={viewportDropdownOpen === bp.width}
+                >
+                  <ViewportDeviceIcon type={bp.icon} isBase={index === 0} className="h-4 w-4 shrink-0" />
+                </button>
+              ))}
+            </div>
+            {viewportDropdownOpen !== null && (() => {
+              const idx = VIEWPORT_BREAKPOINTS.findIndex((b) => b.width === viewportDropdownOpen);
+              const bp = idx >= 0 ? VIEWPORT_BREAKPOINTS[idx] : null;
+              if (!bp) return null;
+              const index = idx + 1;
+              const isBase = index === 1;
+              const title = isBase
+                ? `${bp.label}: * Base breakpoint (${index})`
+                : `${bp.label} — ${bp.width}px (${index})`;
+              const description = isBase
+                ? `${bp.label} styles apply at all breakpoints, unless they're edited at a larger or smaller breakpoint. Start your styling here.`
+                : `Styles added here will apply at ${bp.width}px and down, unless they're edited at a smaller breakpoint.`;
+              return (
+                <div className="absolute left-1/2 top-full z-50 mt-1.5 -translate-x-1/2">
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-gray-700" />
+                  <div className="min-w-[240px] rounded-lg border border-gray-600 bg-gray-700 px-3 py-2.5 shadow-xl">
+                    <p className="font-semibold text-white">{title}</p>
+                    <p className="mt-1 text-xs leading-snug text-gray-300">{description}</p>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
-          <span className="text-xs text-gray-400">{viewportPx}px</span>
           <button type="button" className="rounded p-1.5 text-gray-400 hover:bg-gray-700 hover:text-white" title="Notifications">
             <BellIcon className="h-5 w-5" />
           </button>
@@ -546,26 +631,75 @@ export default function WebsiteEditorView({
         </div>
         <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
           <div className="relative flex-1 overflow-auto bg-gray-800/30 p-6">
-            <div className="mx-auto min-h-full rounded-lg border border-gray-600 bg-white shadow-xl" style={{ maxWidth: viewportPx }}>
-              <div className="p-6 md:p-10">
-                {/* Navigation */}
+            <div
+              className="mx-auto min-h-full rounded-lg border border-gray-600 bg-white shadow-xl"
+              style={{ maxWidth: viewportPx }}
+              data-viewport={viewportCategory}
+            >
+              <div
+                className={
+                  viewportCategory === "mobile"
+                    ? "p-4"
+                    : viewportCategory === "tablet"
+                      ? "p-6"
+                      : "p-6 md:p-10"
+                }
+              >
+                {/* Navigation - desktop: row; mobile/tablet: hamburger menu */}
                 <nav
                   data-id="navigation"
                   onClick={(e) => { e.stopPropagation(); onSelect("navigation"); }}
-                  className={`relative flex items-center justify-between border-b-2 border-brand-500 pb-3 ${selectedId === "navigation" ? "ring-2 ring-brand-500 ring-offset-2 -m-1 p-1 rounded" : ""}`}
+                  className={`relative flex border-b-2 border-brand-500 pb-3 ${viewportCategory === "desktop" ? "items-center justify-between" : "flex-col gap-0"} ${selectedId === "navigation" ? "ring-2 ring-brand-500 ring-offset-2 -m-1 p-1 rounded" : ""}`}
                 >
-                  <h1 className="text-2xl font-bold text-gray-900 underline decoration-brand-500 decoration-2 underline-offset-2">{content.title || "Portfolio"}</h1>
-                  <div className="flex gap-6 text-sm font-medium uppercase tracking-wide text-gray-700">
-                    <a href="#home" className="hover:text-brand-500">HOME</a>
-                    <a href="#about" className="hover:text-brand-500">ABOUT</a>
-                    <a href="#styleguide" className="hover:text-brand-500">STYLEGUIDE</a>
+                  <div className="flex w-full items-center justify-between">
+                    <h1
+                      className={
+                        viewportCategory === "mobile"
+                          ? "text-lg font-bold text-gray-900 underline decoration-brand-500 decoration-2 underline-offset-2"
+                          : "text-2xl font-bold text-gray-900 underline decoration-brand-500 decoration-2 underline-offset-2"
+                      }
+                    >
+                      {content.title || "Portfolio"}
+                    </h1>
+                    {viewportCategory !== "desktop" && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setNavMenuOpen((o) => !o); }}
+                        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                        aria-label={navMenuOpen ? "Close menu" : "Open menu"}
+                        aria-expanded={navMenuOpen}
+                      >
+                        <span className="flex h-5 w-5 flex-col justify-center gap-1" aria-hidden>
+                          <span className={`h-0.5 w-5 rounded-full bg-current transition ${navMenuOpen ? "translate-y-1.5 rotate-45" : ""}`} />
+                          <span className={`h-0.5 w-5 rounded-full bg-current transition ${navMenuOpen ? "opacity-0" : ""}`} />
+                          <span className={`h-0.5 w-5 rounded-full bg-current transition ${navMenuOpen ? "-translate-y-1.5 -rotate-45" : ""}`} />
+                        </span>
+                      </button>
+                    )}
                   </div>
+                  {viewportCategory === "desktop" ? (
+                    <div className="flex gap-6 text-sm font-medium uppercase tracking-wide text-gray-700">
+                      <a href="#home" className="hover:text-brand-500">HOME</a>
+                      <a href="#about" className="hover:text-brand-500">ABOUT</a>
+                      <a href="#styleguide" className="hover:text-brand-500">STYLEGUIDE</a>
+                    </div>
+                  ) : (
+                    <div
+                      className={`overflow-hidden transition-all duration-200 ease-out ${navMenuOpen ? "max-h-40 opacity-100" : "max-h-0 opacity-0"}`}
+                    >
+                      <div className="flex flex-col gap-1 border-t border-gray-200 pt-3">
+                        <a href="#home" className="py-2 text-sm font-medium uppercase tracking-wide text-gray-700 hover:text-brand-500">HOME</a>
+                        <a href="#about" className="py-2 text-sm font-medium uppercase tracking-wide text-gray-700 hover:text-brand-500">ABOUT</a>
+                        <a href="#styleguide" className="py-2 text-sm font-medium uppercase tracking-wide text-gray-700 hover:text-brand-500">STYLEGUIDE</a>
+                      </div>
+                    </div>
+                  )}
                 </nav>
-                {/* Hero / Intro */}
+                {/* Hero / Intro - responsive margins & text */}
                 <section
                   data-id="hero"
                   onClick={(e) => { e.stopPropagation(); onSelect("hero"); }}
-                  className={`relative mt-10 rounded-lg p-4 ${selectedId === "hero" ? "ring-2 ring-brand-500 ring-offset-2" : ""}`}
+                  className={`relative rounded-lg p-4 ${viewportCategory === "mobile" ? "mt-6" : "mt-10"} ${selectedId === "hero" ? "ring-2 ring-brand-500 ring-offset-2" : ""}`}
                 >
                   {selectedId === "hero" && (
                     <span className="absolute left-0 top-0 z-10 rounded-br bg-brand-500 px-2 py-0.5 text-xs font-medium text-white">Section</span>
@@ -579,20 +713,26 @@ export default function WebsiteEditorView({
                     value={content.heroHeading || "Jane Lo"}
                     onChange={(e) => onUpdateContent("heroHeading", e.target.value)}
                     onClick={(e) => e.stopPropagation()}
-                    className="mt-1 block w-full max-w-md rounded border border-brand-500/50 bg-white px-3 py-2 text-xl font-semibold text-gray-900"
+                    className={`mt-1 block w-full max-w-md rounded border border-brand-500/50 bg-white px-3 py-2 font-semibold text-gray-900 ${viewportCategory === "mobile" ? "text-base" : "text-xl"}`}
                   />
                   <p className="mt-2 text-sm text-gray-500" data-id="paragraph-intro">{content.heroDescription || "Product Designer"}</p>
-                  <p className="mt-6 text-3xl font-medium leading-tight text-black md:text-4xl" data-id="heading-jumbo">
+                  <p
+                    className={`mt-6 font-medium leading-tight text-black ${viewportCategory === "mobile" ? "text-xl" : viewportCategory === "tablet" ? "text-2xl" : "text-3xl md:text-4xl"}`}
+                    data-id="heading-jumbo"
+                  >
                     Hey there! I&apos;m a creative graphic and web designer based in sunny San Francisco, CA.
                   </p>
                 </section>
-                {/* Works Grid - 4 project cards */}
+                {/* Works Grid - responsive cols & gap */}
                 <section
                   data-id="works-section"
                   onClick={(e) => { e.stopPropagation(); onSelect("works-section"); }}
-                  className={`relative mt-16 rounded-lg p-4 ${selectedId === "works-section" ? "ring-2 ring-brand-500 ring-offset-2" : ""}`}
+                  className={`relative rounded-lg p-4 ${viewportCategory === "mobile" ? "mt-8" : "mt-16"} ${selectedId === "works-section" ? "ring-2 ring-brand-500 ring-offset-2" : ""}`}
                 >
-                  <div className="grid grid-cols-1 gap-8 sm:grid-cols-2" data-id="works-grid">
+                  <div
+                    className={`grid ${viewportCategory === "mobile" ? "grid-cols-1 gap-4" : viewportCategory === "tablet" ? "grid-cols-1 sm:grid-cols-2 gap-6" : "grid-cols-1 sm:grid-cols-2 gap-8"}`}
+                    data-id="works-grid"
+                  >
                     {[
                       { id: "div-block-1", title: "Project 1", category: "Graphic Design" },
                       { id: "div-block-2", title: "Project 2", category: "Web Design" },
@@ -616,17 +756,20 @@ export default function WebsiteEditorView({
                     ))}
                   </div>
                 </section>
-                {/* My experience */}
+                {/* My experience - responsive margins & grid */}
                 <section
                   data-id="work-experience-grid"
                   onClick={(e) => { e.stopPropagation(); onSelect("work-experience-grid"); }}
-                  className={`relative mt-16 rounded-lg p-4 ${["work-experience-grid", "experience-container", "career-headline-wrap", "heading-experience", "paragraph-experience"].includes(selectedId ?? "") || selectedId?.startsWith("work-position") ? "ring-2 ring-brand-500 ring-offset-2" : ""}`}
+                  className={`relative rounded-lg p-4 ${viewportCategory === "mobile" ? "mt-8" : "mt-16"} ${["work-experience-grid", "experience-container", "career-headline-wrap", "heading-experience", "paragraph-experience"].includes(selectedId ?? "") || selectedId?.startsWith("work-position") ? "ring-2 ring-brand-500 ring-offset-2" : ""}`}
                 >
-                  <h2 className="text-2xl font-bold text-gray-900 mb-4" data-id="heading-experience">My experience</h2>
-                  <p className="text-gray-600 mb-8 max-w-2xl" data-id="paragraph-experience">
+                  <h2 className={`font-bold text-gray-900 mb-4 ${viewportCategory === "mobile" ? "text-xl" : "text-2xl"}`} data-id="heading-experience">My experience</h2>
+                  <p className={`text-gray-600 max-w-2xl ${viewportCategory === "mobile" ? "mb-6 text-sm" : "mb-8"}`} data-id="paragraph-experience">
                     Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique. Duis cursus, mi quis viverra ornare, eros dolor interdum nulla.
                   </p>
-                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4" data-id="work-experience-grid">
+                  <div
+                    className={`grid gap-4 ${viewportCategory === "mobile" ? "grid-cols-1" : viewportCategory === "tablet" ? "grid-cols-1 sm:grid-cols-2 gap-6" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"}`}
+                    data-id="work-experience-grid"
+                  >
                     {[
                       { company: "Webflow", role: "Graphic Designer", period: "April 2014 — Mar 2015" },
                       { company: "Webflow", role: "Web Designer", period: "Apr 2015 — Mar 2016" },
