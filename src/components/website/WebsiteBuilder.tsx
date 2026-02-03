@@ -3,7 +3,7 @@
 import React, { useState, useCallback } from "react";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import { PaperPlaneIcon } from "@/icons";
-import WebsiteEditorView from "./WebsiteEditorView";
+import WebsiteEditorView from "@/components/website/WebsiteEditorView";
 
 type WebsiteSection = {
   id: string;
