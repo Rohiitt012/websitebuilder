@@ -15,6 +15,8 @@ type WebsiteContent = {
   title: string;
   heroHeading: string;
   heroDescription: string;
+  heroJumboText: string;
+  canvasCopy?: Record<string, string>;
   sections: WebsiteSection[];
 };
 
@@ -31,6 +33,7 @@ function buildFromPrompt(prompt: string): WebsiteContent {
       title: "My Website",
       heroHeading: "Welcome",
       heroDescription: "Describe your website here.",
+      heroJumboText: "Hey there! I'm a creative graphic and web designer based in sunny San Francisco, CA.",
       sections: [
         createSection("About", "Add your content here.", "section-1"),
         createSection("Services", "Add your services or features here.", "section-2"),
@@ -53,10 +56,13 @@ function buildFromPrompt(prompt: string): WebsiteContent {
     sections.push(createSection("About", rest || "Add your content here."));
     sections.push(createSection("More", "You can edit all sections manually."));
   }
+  const jumboDefault = "Hey there! I'm a creative graphic and web designer based in sunny San Francisco, CA.";
+  const jumbo = rest ? (rest.length > 500 ? rest.slice(0, 500) : rest) : jumboDefault;
   return {
     title: firstLine.length > 50 ? firstLine.slice(0, 50) : firstLine,
     heroHeading: secondLine.length > 60 ? secondLine.slice(0, 60) : secondLine,
     heroDescription: rest.length > 300 ? rest.slice(0, 300) : rest,
+    heroJumboText: jumbo,
     sections,
   };
 }

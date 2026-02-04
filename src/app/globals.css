@@ -832,3 +832,38 @@ span.flatpickr-weekday,
   opacity: 0.8;
   cursor: grabbing; /* Changes the cursor to indicate dragging */
 }
+
+/* AI thinking indicator – bouncing dots + subtle pulse */
+@keyframes thinking-bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+@keyframes thinking-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+.thinking-dot {
+  animation: thinking-bounce 1.4s ease-in-out infinite both;
+}
+.thinking-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+.thinking-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.thinking-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+.thinking-bubble {
+  animation: thinking-pulse 2s ease-in-out infinite;
+}
